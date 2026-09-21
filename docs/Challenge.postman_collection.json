@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "65846b9d-b72b-44b0-85c9-1b1a2bc575a7",
+    "_postman_id": "db71d0ac-baad-4a9f-a5b7-ce13cd3b25bb",
     "name": "Challenge",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "842807"
@@ -111,7 +111,7 @@
             "header": [],
             "body": {
               "mode": "raw",
-              "raw": "{\r\n    \"productCode\": \"PROD-003\"\r\n}",
+              "raw": "{\r\n    \"productCode\": \"PROD-003\",\r\n    \"quantity\": 2\r\n}",
               "options": {
                 "raw": {
                   "language": "json"
