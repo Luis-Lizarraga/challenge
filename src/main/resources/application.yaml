@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: tienda-app
+  profiles:
+    default: dev
+  threads:
+    virtual:
+      enabled: true
+  cache:
+    type: caffeine
+    cache-names: activeDiscounts
+    caffeine:
+      spec: expireAfterWrite=10m,maximumSize=100
+
+jwt:
+  expiration: 3600000
+
+logging:
+  level:
+    root: INFO
+    org.springframework.web: ERROR
+    org.springframework.security: ERROR
+    org.hibernate.SQL: ERROR
+  file:
+    name: logs/application.log
+
+cart:
+  processing:
+    sleep-ms: 0
+    async:
+      core-pool-size: 10
+      max-pool-size: 30
+      queue-capacity: 500
+      thread-name-prefix: "OrderWorker-"
+    retry:
+      max-attempts: 10
+      backoff-delay: 150
+      multiplier: 2.0
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health,info,metrics,prometheus"
+  endpoint:
+    health:
+      show-details: when_authorized
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    export:
+      prometheus:
+        enabled: true

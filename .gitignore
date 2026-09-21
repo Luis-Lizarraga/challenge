@@ -1,0 +1,47 @@
+# Maven
+target/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# VS Code
+.vscode/
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Test / generated reports
+UnitTestReport/
+htmlReport/
+jmeter-report/
+*.jtl
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+
+# Java
+*.class
+
+# Crash dumps
+hs_err_pid*
+replay_pid*
