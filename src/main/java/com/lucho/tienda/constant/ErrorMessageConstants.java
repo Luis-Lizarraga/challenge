@@ -39,5 +39,6 @@ public final class ErrorMessageConstants {
     public static final String CART_CANCELLED_PROCESSING = "Cart checkout was cancelled due to lack of stock.";
     public static final String OUT_OF_STOCK = "Out of stock for product: %s";
     public static final String CANNOT_MODIFY_CART_STATUS = "Cannot modify cart in status: %s";
-
+    public static final String ORDER_PROCESSING_RETRIES_EXHAUSTED = "Order processing failed after maximum retry attempts";
+    public static final String INSUFFICIENT_STOCK = "Insufficient stock to process the order";
 }

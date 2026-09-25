@@ -11,6 +11,26 @@ spring:
     cache-names: activeDiscounts
     caffeine:
       spec: expireAfterWrite=10m,maximumSize=100
+  jpa:
+    open-in-view: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+
+    consumer:
+      group-id: order-processing-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.lucho.tienda.messaging
+        spring.json.value.default.type: com.lucho.tienda.messaging.OrderProcessingMessage
 
 jwt:
   expiration: 3600000
@@ -27,11 +47,6 @@ logging:
 cart:
   processing:
     sleep-ms: 0
-    async:
-      core-pool-size: 10
-      max-pool-size: 30
-      queue-capacity: 500
-      thread-name-prefix: "OrderWorker-"
     retry:
       max-attempts: 10
       backoff-delay: 150

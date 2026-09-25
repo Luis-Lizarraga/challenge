@@ -1,7 +1,7 @@
 package com.lucho.tienda.security;
 
+import com.lucho.tienda.dto.CartResponse;
 import com.lucho.tienda.exception.CustomAccessDeniedHandler;
-import com.lucho.tienda.model.Cart;
 import com.lucho.tienda.service.CartService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +16,8 @@ import java.util.List;
 
 import static com.lucho.tienda.constant.ApiEndpointConstants.*;
 import static com.lucho.tienda.constant.ApiFieldConstants.*;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -61,9 +63,17 @@ class SecurityConfigTest {
                 List.of(new SimpleGrantedAuthority("ROLE_USER"))
         );
 
-        when(cartService.getCartById(userId, cartId)).thenReturn(new Cart());
+        // This test validates security, not CartResponse mapping.
+        // A mock is enough to isolate the endpoint from business logic.
+        CartResponse cartResponse = mock(CartResponse.class);
 
-        mockMvc.perform(get(requestUri).with(user(principal)))
+        when(cartService.getCartById(eq(userId), eq(cartId)))
+                .thenReturn(cartResponse);
+
+        mockMvc.perform(
+                        get(requestUri)
+                                .with(user(principal))
+                )
                 .andExpect(status().isOk());
     }
 }

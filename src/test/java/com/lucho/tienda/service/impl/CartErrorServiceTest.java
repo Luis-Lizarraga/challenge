@@ -1,6 +1,6 @@
 package com.lucho.tienda.service.impl;
 
-import com.lucho.tienda.model.enums.CartStatus;
+import com.lucho.tienda.model.Cart;
 import com.lucho.tienda.repository.CartRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -8,36 +8,44 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import static org.mockito.Mockito.*;
+import java.util.Optional;
+
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class CartErrorServiceTest {
 
+    private static final Long CART_ID = 1L;
+    private static final String FAILURE_REASON = "Order processing failed";
+    private static final String CANCELLATION_REASON = "Insufficient stock";
+
     @Mock
     private CartRepository cartRepository;
+
+    @Mock
+    private Cart cart;
 
     @InjectMocks
     private CartErrorService cartErrorService;
 
     @Test
-    void markCartAsFailed_UpdatesStatusToFailed() {
-        cartErrorService.markCartAsFailed(1L);
-        verify(cartRepository).updateCartStatus(1L, CartStatus.FAILED);
+    void markAsFailed_MarksCartAsFailedWithReason() {
+        when(cartRepository.findById(CART_ID)).thenReturn(Optional.of(cart));
+
+        cartErrorService.markAsFailed(CART_ID, FAILURE_REASON);
+
+        verify(cartRepository).findById(CART_ID);
+        verify(cart).markAsFailed(FAILURE_REASON);
     }
 
     @Test
-    void markCartAsCancelled_UpdatesStatusToCancelled() {
-        cartErrorService.markCartAsCancelled(1L);
-        verify(cartRepository).updateCartStatus(1L, CartStatus.CANCELLED);
-    }
+    void markAsCancelled_MarksCartAsCancelledWithReason() {
+        when(cartRepository.findById(CART_ID)).thenReturn(Optional.of(cart));
 
-    @Test
-    void markCartAsFailed_HandlesExceptionGracefully() {
-        doThrow(new RuntimeException("DB error")).when(cartRepository).updateCartStatus(1L, CartStatus.FAILED);
+        cartErrorService.markAsCancelled(CART_ID, CANCELLATION_REASON);
 
-        // Debe capturar la excepción en el catch silencioso con log.error
-        cartErrorService.markCartAsFailed(1L);
-
-        verify(cartRepository).updateCartStatus(1L, CartStatus.FAILED);
+        verify(cartRepository).findById(CART_ID);
+        verify(cart).cancel(CANCELLATION_REASON);
     }
 }

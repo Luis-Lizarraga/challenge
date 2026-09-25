@@ -1,12 +1,15 @@
 package com.lucho.tienda.service.impl;
 
-import com.lucho.tienda.model.enums.CartStatus;
+import com.lucho.tienda.exception.ResourceNotFoundException;
+import com.lucho.tienda.model.Cart;
 import com.lucho.tienda.repository.CartRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+
+import static com.lucho.tienda.constant.ErrorMessageConstants.CART_NOT_FOUND;
 
 @Slf4j
 @Service
@@ -15,23 +18,31 @@ public class CartErrorService {
 
     private final CartRepository cartRepository;
 
+    /**
+     * Persists a failed processing result in an independent transaction.
+     * This allows the failure state to survive even when the caller transaction rolls back.
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markCartAsFailed(Long cartId) {
-        try {
-            cartRepository.updateCartStatus(cartId, CartStatus.FAILED);
-            log.warn("Marked cart ID {} as FAILED due to processing error.", cartId);
-        } catch (Exception ex) {
-            log.error("Could not update cart ID {} status to FAILED", cartId, ex);
-        }
+    public void markAsFailed(Long cartId, String reason) {
+        Cart cart = getCart(cartId);
+        cart.markAsFailed(reason);
+        log.warn("Cart ID {} marked as FAILED. Reason: {}", cartId, reason);
     }
 
+    /**
+     * Persists a cancellation in an independent transaction, including the reason
+     * that caused order processing to stop.
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markCartAsCancelled(Long cartId) {
-        try {
-            cartRepository.updateCartStatus(cartId, CartStatus.CANCELLED);
-            log.warn("Cart ID {} has been marked as CANCELLED due to out of stock.", cartId);
-        } catch (Exception ex) {
-            log.error("Could not update cart ID {} status to CANCELLED", cartId, ex);
-        }
+    public void markAsCancelled(Long cartId, String reason) {
+        Cart cart = getCart(cartId);
+        cart.cancel(reason);
+        log.warn("Cart ID {} marked as CANCELLED. Reason: {}", cartId, reason);
+    }
+
+    private Cart getCart(Long cartId) {
+        return cartRepository.findById(cartId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        String.format(CART_NOT_FOUND, cartId)));
     }
 }

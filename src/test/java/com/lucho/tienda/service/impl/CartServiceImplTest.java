@@ -1,9 +1,11 @@
 package com.lucho.tienda.service.impl;
 
+import com.lucho.tienda.dto.CartItemResponse;
+import com.lucho.tienda.dto.CartResponse;
 import com.lucho.tienda.dto.ProductOperationRequest;
-import com.lucho.tienda.event.OrderProcessingEvent;
 import com.lucho.tienda.exception.BadRequestException;
 import com.lucho.tienda.exception.ResourceNotFoundException;
+import com.lucho.tienda.messaging.OrderProcessingRequestedEvent;
 import com.lucho.tienda.model.*;
 import com.lucho.tienda.model.enums.CartStatus;
 import com.lucho.tienda.repository.CartRepository;
@@ -18,7 +20,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
-import java.util.*;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -26,7 +30,6 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CartServiceImplTest {
-
     @Mock
     private CartRepository cartRepository;
 
@@ -37,7 +40,10 @@ class CartServiceImplTest {
     private UserRepository userRepository;
 
     @Mock
-    private ApplicationEventPublisher eventPublisher;
+    private OrderMetricsService orderMetricsService;
+
+    @Mock
+    private ApplicationEventPublisher applicationEventPublisher;
 
     @InjectMocks
     private CartServiceImpl cartService;
@@ -83,10 +89,10 @@ class CartServiceImplTest {
     void createCart_Success_WhenUserExists() {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
-        Cart created = cartService.createCart(1L);
+        CartResponse created = cartService.createCart(1L);
 
         assertNotNull(created);
-        assertEquals(1L, created.getUser().getId());
+        assertEquals(1L, created.userId());
         verify(cartRepository).save(any(Cart.class));
     }
 
@@ -109,10 +115,10 @@ class CartServiceImplTest {
         when(cartRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(cart));
         when(productRepository.findByCode("P01")).thenReturn(Optional.of(product));
 
-        Cart updatedCart = cartService.addProduct(1L, request);
+        CartResponse updatedCart = cartService.addProduct(1L, request);
 
-        assertEquals(1, updatedCart.getItems().size());
-        assertEquals(2, updatedCart.getItems().stream().findFirst().orElseThrow().getQuantity());
+        assertEquals(1, updatedCart.items().size());
+        assertEquals(2, updatedCart.items().stream().findFirst().orElseThrow().quantity());
         verify(cartRepository).save(cart);
     }
 
@@ -127,9 +133,9 @@ class CartServiceImplTest {
         when(cartRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(cart));
         when(productRepository.findByCode("P02")).thenReturn(Optional.of(newProduct));
 
-        Cart updatedCart = cartService.addProduct(1L, request);
+        CartResponse updatedCart = cartService.addProduct(1L, request);
 
-        assertEquals(2, updatedCart.getItems().size());
+        assertEquals(2, updatedCart.items().size());
         verify(cartRepository).save(cart);
     }
 
@@ -174,10 +180,10 @@ class CartServiceImplTest {
         ProductOperationRequest request = new ProductOperationRequest(1L, "P01", 5);
         when(cartRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(cart));
 
-        Cart updatedCart = cartService.updateProductQuantity(1L, request);
+        CartResponse updatedCart = cartService.updateProductQuantity(1L, request);
 
-        assertEquals(1, updatedCart.getItems().size());
-        assertEquals(5, updatedCart.getItems().stream().findFirst().orElseThrow().getQuantity());
+        assertEquals(1, updatedCart.items().size());
+        assertEquals(5, updatedCart.items().stream().findFirst().orElseThrow().quantity());
         verify(cartRepository).save(cart);
     }
 
@@ -218,9 +224,9 @@ class CartServiceImplTest {
     void removeProduct_RemovesItemCompletely_WhenProductInCart() {
         when(cartRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(cart));
 
-        Cart updatedCart = cartService.removeProduct(1L, 1L, "P01");
+        CartResponse updatedCart = cartService.removeProduct(1L, 1L, "P01");
 
-        assertTrue(updatedCart.getItems().isEmpty());
+        assertTrue(updatedCart.items().isEmpty());
         verify(cartRepository).saveAndFlush(cart);
     }
 
@@ -244,7 +250,7 @@ class CartServiceImplTest {
     @Test
     void getCartProducts_ReturnsCartItems() {
         when(cartRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(cart));
-        List<CartItem> items = cartService.getCartProducts(1L, 1L);
+        List<CartItemResponse> items = cartService.getCartProducts(1L, 1L);
         assertFalse(items.isEmpty());
     }
 
@@ -262,21 +268,21 @@ class CartServiceImplTest {
     @Test
     void getUserCarts_Success_WithoutStatusFilter() {
         when(cartRepository.findByUserId(1L)).thenReturn(List.of(cart));
-        List<Cart> carts = cartService.getUserCarts(1L, null);
+        List<CartResponse> carts = cartService.getUserCarts(1L, null);
         assertEquals(1, carts.size());
     }
 
     @Test
     void getUserCarts_Success_WithStatusFilter() {
         when(cartRepository.findByUserIdAndStatus(1L, CartStatus.CREATED)).thenReturn(List.of(cart));
-        List<Cart> carts = cartService.getUserCarts(1L, CartStatus.CREATED);
+        List<CartResponse> carts = cartService.getUserCarts(1L, CartStatus.CREATED);
         assertEquals(1, carts.size());
     }
 
     @Test
     void getUserCarts_ReturnsEmptyList_WhenNoCartsFound() {
         when(cartRepository.findByUserId(2L)).thenReturn(List.of());
-        List<Cart> carts = cartService.getUserCarts(2L, null);
+        List<CartResponse> carts = cartService.getUserCarts(2L, null);
         assertTrue(carts.isEmpty());
     }
 
@@ -288,7 +294,7 @@ class CartServiceImplTest {
     @Test
     void getCartById_Success() {
         when(cartRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(cart));
-        Cart found = cartService.getCartById(1L, 1L);
+        CartResponse found = cartService.getCartById(1L, 1L);
         assertNotNull(found);
     }
 
@@ -306,8 +312,9 @@ class CartServiceImplTest {
     // --- ORCHESTRATION & CHECKOUT ---
 
     @Test
-    void initiateCheckout_Success_LocksCartAndPublishesEvent() {
-        when(cartRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(cart));
+    void initiateCheckout_Success_LocksCartAndPublishesProcessingEvent() {
+        when(cartRepository.findByIdAndUserIdForUpdate(1L, 1L))
+                .thenReturn(Optional.of(cart));
 
         cartService.initiateCheckout(1L, 1L);
 
@@ -315,28 +322,43 @@ class CartServiceImplTest {
         assertEquals(CartStatus.PROCESSING, cart.getStatus());
 
         // Verify application event was published
-        verify(eventPublisher).publishEvent(any(OrderProcessingEvent.class));
+        verify(applicationEventPublisher).publishEvent(
+                new OrderProcessingRequestedEvent(1L)
+        );
     }
 
     @Test
     void initiateCheckout_ThrowsBadRequest_WhenCartAlreadyProcessing() {
         cart.setStatus(CartStatus.PROCESSING);
-        when(cartRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(cart));
 
-        assertThrows(BadRequestException.class, () -> cartService.initiateCheckout(1L, 1L));
+        when(cartRepository.findByIdAndUserIdForUpdate(1L, 1L))
+                .thenReturn(Optional.of(cart));
+
+        assertThrows(
+                BadRequestException.class,
+                () -> cartService.initiateCheckout(1L, 1L)
+        );
 
         // Event must never be published if state is invalid
-        verify(eventPublisher, never()).publishEvent(any());
+        verify(applicationEventPublisher, never())
+                .publishEvent(any(OrderProcessingRequestedEvent.class));
     }
 
     @Test
     void initiateCheckout_ThrowsBadRequest_WhenCartIsAlreadyProcessed() {
         cart.setStatus(CartStatus.PROCESSED);
-        when(cartRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(cart));
 
-        assertThrows(BadRequestException.class, () -> cartService.initiateCheckout(1L, 1L));
+        when(cartRepository.findByIdAndUserIdForUpdate(1L, 1L))
+                .thenReturn(Optional.of(cart));
 
-        verify(eventPublisher, never()).publishEvent(any());
+        assertThrows(
+                BadRequestException.class,
+                () -> cartService.initiateCheckout(1L, 1L)
+        );
+
+        // Event must never be published if state is invalid
+        verify(applicationEventPublisher, never())
+                .publishEvent(any(OrderProcessingRequestedEvent.class));
     }
 
     @Test
@@ -345,4 +367,5 @@ class CartServiceImplTest {
 
         assertThrows(ResourceNotFoundException.class, () -> cartService.initiateCheckout(1L, 99L));
     }
+
 }

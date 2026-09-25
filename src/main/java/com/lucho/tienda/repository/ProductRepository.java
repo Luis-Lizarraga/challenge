@@ -14,7 +14,7 @@ public interface ProductRepository extends JpaRepository<Product, Long>{
      * Atomically decrements the stock only if there is enough available.
      * Returns the number of affected rows (1 if successful, 0 if out of stock).
      */
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Modifying(flushAutomatically = true)
     @Query("UPDATE Product p SET p.stock = p.stock - :quantity WHERE p.code = :code AND p.stock >= :quantity")
     int decrementStockSafely(@Param("code") String code, @Param("quantity") int quantity);
 }

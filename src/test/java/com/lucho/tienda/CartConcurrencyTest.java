@@ -1,12 +1,15 @@
 package com.lucho.tienda;
 
+import com.lucho.tienda.dto.CartResponse;
 import com.lucho.tienda.dto.ProductOperationRequest;
 import com.lucho.tienda.model.Cart;
 import com.lucho.tienda.model.CartItem;
+import com.lucho.tienda.messaging.producer.OrderProcessingProducer;
 import com.lucho.tienda.model.Category;
 import com.lucho.tienda.model.Product;
 import com.lucho.tienda.model.User;
 import com.lucho.tienda.model.enums.Role;
+import com.lucho.tienda.model.enums.CartStatus;
 import com.lucho.tienda.repository.*;
 import com.lucho.tienda.service.CartService;
 import org.junit.jupiter.api.AfterEach;
@@ -14,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 
 import java.math.BigDecimal;
 import java.util.concurrent.CountDownLatch;
@@ -22,6 +26,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.doThrow;
 
 // Removed the property override so schema.sql runs and ddl-auto: validate succeeds
 @SpringBootTest
@@ -44,6 +50,9 @@ class CartConcurrencyTest {
 
     @Autowired
     private DiscountRepository discountRepository;
+
+    @MockBean
+    private OrderProcessingProducer orderProcessingProducer;
 
     private Long cartId;
     private Long userId;
@@ -81,8 +90,8 @@ class CartConcurrencyTest {
         productRepository.save(product);
 
         // 3. Create cart for the user
-        Cart cart = cartService.createCart(user.getId());
-        cartId = cart.getId();
+        CartResponse cart = cartService.createCart(user.getId());
+        cartId = cart.id();
     }
 
     @AfterEach
@@ -186,4 +195,44 @@ class CartConcurrencyTest {
                 "Three concurrent additions of quantity 1 must result in quantity 3."
         );
     }
+    //@Test
+    void initiateCheckout_WhenKafkaPublishFails_ShouldRollbackCartStatus() {
+        ProductOperationRequest request =
+                new ProductOperationRequest(
+                        cartId,
+                        productCode,
+                        1
+                );
+
+        cartService.addProduct(userId, request);
+
+        Cart cartBeforeCheckout =
+                cartRepository.findCartById(cartId)
+                        .orElseThrow();
+
+        assertEquals(
+                CartStatus.CREATED,
+                cartBeforeCheckout.getStatus()
+        );
+
+        doThrow(new IllegalStateException("Kafka unavailable"))
+                .when(orderProcessingProducer)
+                .send(cartId);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> cartService.initiateCheckout(userId, cartId)
+        );
+
+        Cart cartAfterFailure =
+                cartRepository.findCartById(cartId)
+                        .orElseThrow();
+
+        assertEquals(
+                CartStatus.CREATED,
+                cartAfterFailure.getStatus(),
+                "Cart status should rollback to CREATED when Kafka publication fails."
+        );
+    }
+
 }

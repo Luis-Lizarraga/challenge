@@ -1,7 +1,10 @@
 package com.lucho.tienda.service.impl;
 
+import com.lucho.tienda.dto.CartItemResponse;
+import com.lucho.tienda.dto.CartResponse;
 import com.lucho.tienda.dto.ProductOperationRequest;
-import com.lucho.tienda.event.OrderProcessingEvent;
+import com.lucho.tienda.messaging.OrderProcessingRequestedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import com.lucho.tienda.exception.BadRequestException;
 import com.lucho.tienda.exception.ResourceNotFoundException;
 import com.lucho.tienda.model.Cart;
@@ -15,7 +18,6 @@ import com.lucho.tienda.repository.UserRepository;
 import com.lucho.tienda.service.CartService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,11 +36,12 @@ public class CartServiceImpl implements CartService {
     private final CartRepository cartRepository;
     private final UserRepository userRepository;
     private final ProductRepository productRepository;
-    private final ApplicationEventPublisher eventPublisher;
+    private final ApplicationEventPublisher applicationEventPublisher;
+    private final OrderMetricsService orderMetricsService;
 
     @Override
     @Transactional
-    public Cart createCart(Long userId) {
+    public CartResponse createCart(Long userId) {
         if (userId == null) {
             throw new BadRequestException(USER_ID_REQUIRED);
         }
@@ -49,12 +52,12 @@ public class CartServiceImpl implements CartService {
         Cart cart = Cart.builder()
                 .user(user)
                 .build();
-        return cartRepository.save(cart);
+        return CartResponse.fromEntity(cartRepository.save(cart));
     }
 
     @Override
     @Transactional
-    public Cart addProduct(Long userId, ProductOperationRequest request) {
+    public CartResponse addProduct(Long userId, ProductOperationRequest request) {
         Cart cart = cartRepository.findByIdAndUserIdForUpdate(request.cartId(), userId)
                 .orElseThrow(() -> new ResourceNotFoundException(String.format(CART_NOT_FOUND, request.cartId())));
 
@@ -71,12 +74,12 @@ public class CartServiceImpl implements CartService {
             createNewCartItem(cart, product, request.quantity());
         }
 
-        return saveCartWithUpdatedTotal(cart);
+        return CartResponse.fromEntity(saveCartWithUpdatedTotal(cart));
     }
 
     @Override
     @Transactional
-    public Cart updateProductQuantity(Long userId, ProductOperationRequest request) {
+    public CartResponse updateProductQuantity(Long userId, ProductOperationRequest request) {
         if (request.quantity() == null || request.quantity() < 1) {
             throw new BadRequestException(MIN_QUANTITY_REQUIRED);
         }
@@ -96,12 +99,12 @@ public class CartServiceImpl implements CartService {
         }
 
         itemToUpdate.changeQuantity(request.quantity());
-        return saveCartWithUpdatedTotal(cart);
+        return CartResponse.fromEntity(saveCartWithUpdatedTotal(cart));
     }
 
     @Override
     @Transactional
-    public Cart removeProduct(Long userId, Long cartId, String productCode) {
+    public CartResponse removeProduct(Long userId, Long cartId, String productCode) {
         Cart cart = cartRepository.findByIdAndUserIdForUpdate(cartId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException(String.format(CART_NOT_FOUND, cartId)));
         validateCartModifiable(cart);
@@ -112,12 +115,12 @@ public class CartServiceImpl implements CartService {
                 .orElseThrow(() -> new ResourceNotFoundException(String.format(PRODUCT_NOT_FOUND, productCode)));
 
         cart.removeItem(itemToRemove);
-        return saveCartWithUpdatedTotal(cart);
+        return CartResponse.fromEntity(saveCartWithUpdatedTotal(cart));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<CartItem> getCartProducts(Long userId, Long cartId) {
+    public List<CartItemResponse> getCartProducts(Long userId, Long cartId) {
         if (cartId == null) {
             throw new BadRequestException(CART_ID_REQUIRED);
         }
@@ -125,37 +128,63 @@ public class CartServiceImpl implements CartService {
         Cart cart = getCartForUser(userId, cartId);
         return cart.getItems().stream()
                 .sorted(Comparator.comparing(CartItem::getId))
+                .map(CartItemResponse::fromEntity)
                 .toList();
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<Cart> getUserCarts(Long userId, CartStatus status) {
+    public List<CartResponse> getUserCarts(Long userId, CartStatus status) {
         if (userId == null) {
             throw new BadRequestException(USER_ID_REQUIRED);
         }
-        return status != null
+        List<Cart> carts = status != null
                 ? cartRepository.findByUserIdAndStatus(userId, status)
                 : cartRepository.findByUserId(userId);
+
+        return carts.stream()
+                .map(CartResponse::fromEntity)
+                .toList();
     }
 
     @Override
     @Transactional
     public void initiateCheckout(Long userId, Long cartId) {
+
         Cart cart = cartRepository.findByIdAndUserIdForUpdate(cartId, userId)
-                .orElseThrow(() -> new ResourceNotFoundException(String.format(CART_NOT_FOUND, cartId)));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                String.format(CART_NOT_FOUND, cartId)
+                        )
+                );
 
         cart.startProcessing();
-        eventPublisher.publishEvent(new OrderProcessingEvent(cart.getId()));
+
+        orderMetricsService.incrementStarted();
+
+        applicationEventPublisher.publishEvent(
+                new OrderProcessingRequestedEvent(cart.getId())
+        );
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Cart getCartById(Long userId, Long cartId) {
+    public CartResponse getCartById(Long userId, Long cartId) {
         if (cartId == null) {
             throw new BadRequestException(CART_ID_REQUIRED);
         }
-        return getCartForUser(userId, cartId);
+        return CartResponse.fromEntity(getCartForUser(userId, cartId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Cart getCheckoutStatus(Long userId, Long cartId) {
+        return cartRepository.findByIdAndUserId(cartId, userId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                String.format(CART_NOT_FOUND, cartId)
+                        )
+                );
     }
 
     private Cart getCartForUser(Long userId, Long cartId) {
@@ -188,35 +217,30 @@ public class CartServiceImpl implements CartService {
         return cart;
     }
     /**
-     * Helper method to update the quantity of an existing item in the cart.
-     * Crucially re-validates stock using the reloaded product data to maintain integrity (Senior Best Practice).
-     * This is vital in concurrent environments to ensure the final quantity does not exceed reloaded stock.
+     * Updates an existing item after validating the resulting quantity against
+     * the latest product stock loaded for the current operation.
      */
     private void updateExistingItemQuantity(CartItem item, Product product, Integer additionalQuantity) {
-        // Recalculate the final quantity by adding the new additional quantity.
         int finalQuantity = item.getQuantity() + additionalQuantity;
 
-        // Perform strict stock re-validation using the reloaded product data to maintain integrity (Senior Best Practice).
-        // The initial check against obsolete memory data might have been misleading in a concurrent race.
+        // Revalidate the final quantity because stock may have changed since an earlier read.
         if (product.getStock() < finalQuantity) {
             throw new BadRequestException(String.format(OUT_OF_STOCK, product.getCode()));
         }
 
-        // Set the final validated quantity on the item.
         item.changeQuantity(finalQuantity);
     }
 
     /**
      * Helper method to create a new item and add it to the cart.
-     * Validates initial stock preventatively and handles the bidirectional association properly.
+     * Validates available stock and maintains the bidirectional cart-item association.
      */
     private void createNewCartItem(Cart cart, Product product, Integer requestedQuantity) {
-        // Validate initial stock preventatively for the new item.
         if (product.getStock() < requestedQuantity) {
             throw new BadRequestException(String.format(OUT_OF_STOCK, product.getCode()));
         }
 
-        // Create the new item using the Builder pattern (established practice).
+        // Snapshot the current unit price so later product price changes do not alter this cart line.
         // Notice we explicitly set the parent Cart reference here.
         CartItem newItem = CartItem.builder()
                 .product(product)

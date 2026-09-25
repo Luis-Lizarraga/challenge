@@ -23,7 +23,7 @@ public class StockService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void deductStockForCart(Cart cart) {
-        // Defensa silenciosa: Si por la concurrencia llega vacío, simplemente retornamos sin romper el hilo
+        // Silent defense: If it is empty due to concurrency, we simply return without breaking the thread.
         if (cart == null || cart.getItems() == null || cart.getItems().isEmpty()) {
             return;
         }

@@ -22,7 +22,7 @@ public final class ApiEndpointConstants {
     public static final String SUB_ENDPOINT_GET_CART = "/{" + ApiFieldConstants.PARAM_CART_ID + "}";
 
     public static final String FULL_ENDPOINT_CART_PRODUCTS = ENDPOINT_CARTS + SUB_ENDPOINT_CART_PRODUCTS;
-
+    public static final String SUB_ENDPOINT_CHECKOUT_STATUS = ENDPOINT_CARTS + "/{" + ApiFieldConstants.PARAM_CART_ID + "}/checkout/status";
     // ==========================================
     // SECURITY CONFIG (SecurityConfig)
     // ==========================================

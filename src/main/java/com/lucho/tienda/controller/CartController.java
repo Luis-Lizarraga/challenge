@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -44,8 +45,8 @@ public class CartController {
     @PostMapping
     public ResponseEntity<CartResponse> createCart(@AuthenticationPrincipal UserDetailsImpl userDetails) {
         // Retrieve the user ID directly from the authenticated principal in memory
-        Cart cart = cartService.createCart(userDetails.getId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(CartResponse.fromEntity(cart));
+        CartResponse cart = cartService.createCart(userDetails.getId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(cart);
     }
 
     @Operation(summary = OP_ADD_PRODUCT)
@@ -65,8 +66,8 @@ public class CartController {
                 request.productCode(),
                 request.quantity()
         );
-        Cart cart = cartService.addProduct(userDetails.getId(), serviceRequest);
-        return ResponseEntity.ok(CartResponse.fromEntity(cart));
+        CartResponse cart = cartService.addProduct(userDetails.getId(), serviceRequest);
+        return ResponseEntity.ok(cart);
     }
     @Operation(summary = OP_UPDATE_PRODUCT_QTY)
     @PutMapping(SUB_ENDPOINT_REMOVE_PRODUCT)
@@ -81,8 +82,8 @@ public class CartController {
                 productCode,
                 request.quantity()
         );
-        Cart cart = cartService.updateProductQuantity(userDetails.getId(), serviceRequest);
-        return ResponseEntity.ok(CartResponse.fromEntity(cart));
+        CartResponse cart = cartService.updateProductQuantity(userDetails.getId(), serviceRequest);
+        return ResponseEntity.ok(cart);
     }
 
     @Operation(summary = OP_REMOVE_PRODUCT)
@@ -96,16 +97,16 @@ public class CartController {
             @PathVariable(FIELD_PRODUCT_CODE) String productCode,
             @AuthenticationPrincipal UserDetailsImpl userDetails) {
 
-        Cart cart = cartService.removeProduct(userDetails.getId(), cartId, productCode);
+        CartResponse cart = cartService.removeProduct(userDetails.getId(), cartId, productCode);
 
-        return ResponseEntity.ok(CartResponse.fromEntity(cart));
+        return ResponseEntity.ok(cart);
     }
 
     @GetMapping(SUB_ENDPOINT_CART_PRODUCTS)
     public ResponseEntity<List<CartItemResponse>> getCartProducts(@PathVariable(PARAM_CART_ID) Long cartId,
                                                                   @AuthenticationPrincipal UserDetailsImpl userDetails) {
-        List<CartItem> items = cartService.getCartProducts(userDetails.getId(), cartId);
-        return ResponseEntity.ok(CartItemResponse.fromEntityList(items));
+        List<CartItemResponse> items = cartService.getCartProducts(userDetails.getId(), cartId);
+        return ResponseEntity.ok(items);
     }
 
     @Operation(summary = OP_GET_USER_CARTS)
@@ -116,8 +117,8 @@ public class CartController {
     public ResponseEntity<List<CartResponse>> getUserCarts(@AuthenticationPrincipal UserDetailsImpl userDetails,
                                                            @RequestParam(required = false) CartStatus status) {
         // Fully decoupled from token parsing
-        List<Cart> carts = cartService.getUserCarts(userDetails.getId(), status);
-        return ResponseEntity.ok(CartResponse.fromEntityList(carts));
+        List<CartResponse> carts = cartService.getUserCarts(userDetails.getId(), status);
+        return ResponseEntity.ok(carts);
     }
 
     @Operation(summary = OP_PROCESS_ORDER)
@@ -140,8 +141,22 @@ public class CartController {
     @GetMapping(SUB_ENDPOINT_GET_CART)
     public ResponseEntity<CartResponse> getCart(@PathVariable(PARAM_CART_ID) Long cartId,
                                                 @AuthenticationPrincipal UserDetailsImpl userDetails) {
-        Cart cart = cartService.getCartById(userDetails.getId(), cartId);
-        return ResponseEntity.ok(CartResponse.fromEntity(cart));
+        CartResponse cart = cartService.getCartById(userDetails.getId(), cartId);
+        return ResponseEntity.ok(cart);
     }
 
+    @GetMapping(SUB_ENDPOINT_CHECKOUT_STATUS)
+    public ResponseEntity<CheckoutStatusResponse> getCheckoutStatus(
+            @PathVariable(PARAM_CART_ID) Long cartId,
+            @AuthenticationPrincipal @NonNull UserDetailsImpl userDetails) {
+
+        Cart cart = cartService.getCheckoutStatus(
+                userDetails.getId(),
+                cartId
+        );
+
+        return ResponseEntity.ok(
+                CheckoutStatusResponse.fromEntity(cart)
+        );
+    }
 }

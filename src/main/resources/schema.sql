@@ -54,6 +54,7 @@ CREATE TABLE carritos (
                           estado VARCHAR(50) NOT NULL,
                           monto_total DECIMAL(19, 2) NOT NULL DEFAULT 0.00,
                           version BIGINT,
+                          razon_fallo VARCHAR(500),
                           CONSTRAINT fk_carritos_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
 );
 

@@ -40,6 +40,9 @@ public class Cart {
     @Builder.Default
     private BigDecimal totalAmount = BigDecimal.ZERO;
 
+    @Column(name = "razon_fallo", length = 500)
+    private String failureReason;
+
     @Version
     private Long version;
 
@@ -73,8 +76,18 @@ public class Cart {
                     "Cannot initiate checkout for an empty cart.");
         }
         this.status = CartStatus.PROCESSING;
+        this.failureReason = null;
     }
 
+    public void markAsFailed(String reason) {
+        this.status = CartStatus.FAILED;
+        this.failureReason = reason;
+    }
+
+    public void cancel(String reason) {
+        this.status = CartStatus.CANCELLED;
+        this.failureReason = reason;
+    }
     /** Marks a successfully processed cart as completed. */
     public void markAsProcessed() {
         if (status != CartStatus.PROCESSING) {
@@ -82,6 +95,7 @@ public class Cart {
                     "Only a PROCESSING cart can be marked as PROCESSED.");
         }
         this.status = CartStatus.PROCESSED;
+        this.failureReason = null;
     }
 
     public void addItem(CartItem item) {

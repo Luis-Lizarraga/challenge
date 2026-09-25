@@ -1,6 +1,8 @@
 package com.lucho.tienda.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lucho.tienda.dto.CartItemResponse;
+import com.lucho.tienda.dto.CartResponse;
 import com.lucho.tienda.dto.ProductOperationRequest;
 import com.lucho.tienda.model.Cart;
 import com.lucho.tienda.model.CartItem;
@@ -66,6 +68,7 @@ class CartControllerTest {
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     private Cart cart;
+    private CartResponse cartResponse;
     private UserDetailsImpl mockUserDetails;
 
     @BeforeEach
@@ -87,7 +90,10 @@ class CartControllerTest {
         product.setId(1L);
         product.setCode("P01");
         product.setName("Whey Protein");
-        product.setCategory(new Category());
+        Category category = new Category();
+        category.setId(1L);
+        category.setName("PROTEIN");
+        product.setCategory(category);
         product.setPrice(new BigDecimal("1000.00"));
 
         cart = new Cart();
@@ -103,6 +109,7 @@ class CartControllerTest {
         cartItem.setQuantity(2);
         cartItem.setUnitPrice(new BigDecimal("1000.00"));
         cart.getItems().add(cartItem);
+        cartResponse = CartResponse.fromEntity(cart);
     }
 
     @AfterEach
@@ -114,7 +121,7 @@ class CartControllerTest {
     @Test
     @DisplayName("Should create cart successfully using userDetails.getId()")
     void createCart_Returns201_WhenSuccessful() throws Exception {
-        when(cartService.createCart(1L)).thenReturn(cart);
+        when(cartService.createCart(1L)).thenReturn(cartResponse);
 
         mockMvc.perform(post(ENDPOINT_CARTS)
                         .contentType(MediaType.APPLICATION_JSON))
@@ -126,7 +133,7 @@ class CartControllerTest {
     @DisplayName("Should return user carts extracting user identity from Principal")
     void getUserCarts_ReturnsListOfCartResponses() throws Exception {
         // Fix: Use isNull() because the HTTP request does not send the 'status' parameter
-        when(cartService.getUserCarts(eq(1L), isNull())).thenReturn(List.of(cart));
+        when(cartService.getUserCarts(eq(1L), isNull())).thenReturn(List.of(cartResponse));
 
         mockMvc.perform(get(ENDPOINT_CARTS)
                         .contentType(MediaType.APPLICATION_JSON))
@@ -142,7 +149,7 @@ class CartControllerTest {
                 "quantity", 1
         );
 
-        when(cartService.addProduct(eq(1L), any(ProductOperationRequest.class))).thenReturn(cart);
+        when(cartService.addProduct(eq(1L), any(ProductOperationRequest.class))).thenReturn(cartResponse);
 
         String requestUri = FULL_ENDPOINT_CART_PRODUCTS.replace("{" + PARAM_CART_ID + "}", "1");
 
@@ -158,7 +165,7 @@ class CartControllerTest {
 
     @Test
     void removeProduct_Returns200_WhenSuccessful() throws Exception {
-        when(cartService.removeProduct(eq(1L), eq(1L), eq("P01"))).thenReturn(cart);
+        when(cartService.removeProduct(eq(1L), eq(1L), eq("P01"))).thenReturn(cartResponse);
 
         String requestUri = (ENDPOINT_CARTS + SUB_ENDPOINT_REMOVE_PRODUCT)
                 .replace("{" + PARAM_CART_ID + "}", "1")
@@ -176,6 +183,7 @@ class CartControllerTest {
         when(cartService.getCartProducts(eq(1L), eq(1L))).thenReturn(
                 cart.getItems().stream()
                         .sorted(Comparator.comparing(CartItem::getId))
+                        .map(CartItemResponse::fromEntity)
                         .toList());
 
         String requestUri = FULL_ENDPOINT_CART_PRODUCTS.replace("{" + PARAM_CART_ID + "}", "1");
@@ -201,7 +209,7 @@ class CartControllerTest {
 
     @Test
     void getCart_Returns200_WhenSuccessful() throws Exception {
-        when(cartService.getCartById(eq(1L), eq(1L))).thenReturn(cart);
+        when(cartService.getCartById(eq(1L), eq(1L))).thenReturn(cartResponse);
 
         String requestUri = (ENDPOINT_CARTS + SUB_ENDPOINT_GET_CART)
                 .replace("{" + PARAM_CART_ID + "}", "1");
